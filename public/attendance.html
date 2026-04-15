@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Attendance - Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Attendance Module</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="row">
+        <section class="card">
+          <h3>Add / Update Attendance %</h3>
+          <form id="attForm">
+            <input type="hidden" name="_mode" value="create" />
+
+            <label>AttendanceID</label>
+            <input name="AttendanceID" type="number" required />
+
+            <label>StudentID</label>
+            <input name="StudentID" type="number" required />
+
+            <label>CourseID</label>
+            <input name="CourseID" type="number" required />
+
+            <label>Percentage (0-100)</label>
+            <input name="Percentage" type="number" min="0" max="100" step="0.01" required />
+
+            <div class="form-actions">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn secondary" type="button" id="btnReset">Reset</button>
+              <button class="btn secondary" type="button" id="btnRefresh">Refresh Table</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3>Attendance List</h3>
+          <div style="overflow:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>AttendanceID</th>
+                  <th>Student</th>
+                  <th>Course</th>
+                  <th>Percentage</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="attBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const form = qs("#attForm");
+      const body = qs("#attBody");
+      const btnReset = qs("#btnReset");
+      const btnRefresh = qs("#btnRefresh");
+
+      async function loadAttendance() {
+        const rows = await api("/api/attendance");
+        body.innerHTML = rows
+          .map(
+            (r) => `
+          <tr>
+            <td>${escapeHtml(r.AttendanceID)}</td>
+            <td>${escapeHtml(r.StudentID)} <span class="pill">${escapeHtml(r.StudentName)}</span></td>
+            <td>${escapeHtml(r.CourseID)} <span class="pill">${escapeHtml(r.CourseName)}</span></td>
+            <td>${escapeHtml(r.Percentage)}%</td>
+            <td>
+              <div class="actions">
+                <button class="btn secondary" data-edit="${escapeHtml(r.AttendanceID)}">Edit</button>
+                <button class="btn danger" data-del="${escapeHtml(r.AttendanceID)}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      }
+
+      function getData() {
+        const fd = new FormData(form);
+        return Object.fromEntries(fd.entries());
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getData();
+        const mode = data._mode;
+        delete data._mode;
+        try {
+          if (mode === "update") {
+            await api(`/api/attendance/${encodeURIComponent(data.AttendanceID)}`, {
+              method: "PUT",
+              body: JSON.stringify({ Percentage: data.Percentage })
+            });
+            setStatus("Attendance updated.", "ok");
+          } else {
+            await api("/api/attendance", { method: "POST", body: JSON.stringify(data) });
+            setStatus("Attendance added.", "ok");
+          }
+          resetForm(form);
+          form.AttendanceID.readOnly = false;
+          await loadAttendance();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      body.addEventListener("click", async (e) => {
+        const editId = e.target?.dataset?.edit;
+        const delId = e.target?.dataset?.del;
+        if (!editId && !delId) return;
+
+        const rows = await api("/api/attendance");
+
+        if (editId) {
+          const a = rows.find((x) => String(x.AttendanceID) === String(editId));
+          if (!a) return;
+          form.AttendanceID.value = a.AttendanceID;
+          form.AttendanceID.readOnly = true;
+          form.StudentID.value = a.StudentID;
+          form.CourseID.value = a.CourseID;
+          form.Percentage.value = a.Percentage;
+          form.querySelector('input[name="_mode"]').value = "update";
+          setStatus("Loaded attendance. You can update Percentage.", "ok");
+        }
+
+        if (delId) {
+          if (!confirm(`Delete AttendanceID ${delId}?`)) return;
+          try {
+            await api(`/api/attendance/${encodeURIComponent(delId)}`, { method: "DELETE" });
+            setStatus("Attendance deleted.", "ok");
+            resetForm(form);
+            form.AttendanceID.readOnly = false;
+            await loadAttendance();
+          } catch (err) {
+            setStatus(err.message, "err");
+          }
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetForm(form);
+        form.AttendanceID.readOnly = false;
+        setStatus("Form reset.", "ok");
+      });
+      btnRefresh.addEventListener("click", async () => {
+        try {
+          await loadAttendance();
+          setStatus("Table refreshed.", "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadAttendance().catch((e) => setStatus(e.message, "err"));
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Students - Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Student Management</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="row">
+        <section class="card">
+          <h3>Add / Update Student</h3>
+          <p class="muted">Use the table buttons to load a student for update.</p>
+
+          <form id="studentForm">
+            <input type="hidden" name="_mode" value="create" />
+
+            <label>StudentID</label>
+            <input name="StudentID" type="number" placeholder="e.g. 1010" required />
+
+            <label>Name</label>
+            <input name="Name" type="text" placeholder="Full name" required />
+
+            <label>Email</label>
+            <input name="Email" type="email" placeholder="name@example.com" required />
+
+            <label>Phone</label>
+            <input name="Phone" type="text" placeholder="Optional" />
+
+            <label>Department (DeptCode)</label>
+            <input name="Department" type="text" placeholder="e.g. CSE" required />
+
+            <label>Semester (1-8)</label>
+            <input name="Semester" type="number" min="1" max="8" required />
+
+            <div class="form-actions">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn secondary" type="button" id="btnReset">Reset</button>
+              <button class="btn secondary" type="button" id="btnRefresh">Refresh Table</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3>Students List</h3>
+          <div class="muted" style="margin-bottom:10px">Click “Edit” to update, “Delete” to remove.</div>
+          <div style="overflow:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>StudentID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Dept</th>
+                  <th>Semester</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="studentsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const form = qs("#studentForm");
+      const body = qs("#studentsBody");
+      const btnReset = qs("#btnReset");
+      const btnRefresh = qs("#btnRefresh");
+
+      async function loadStudents() {
+        clearStatus();
+        const rows = await api("/api/students");
+        body.innerHTML = rows
+          .map(
+            (r) => `
+            <tr>
+              <td>${escapeHtml(r.StudentID)}</td>
+              <td>${escapeHtml(r.Name)}</td>
+              <td>${escapeHtml(r.Email)}</td>
+              <td>${escapeHtml(r.Phone ?? "")}</td>
+              <td>${escapeHtml(r.Department)} <span class="pill">${escapeHtml(r.DeptName)}</span></td>
+              <td>${escapeHtml(r.Semester)}</td>
+              <td>
+                <div class="actions">
+                  <button class="btn secondary" data-edit="${escapeHtml(r.StudentID)}">Edit</button>
+                  <button class="btn danger" data-del="${escapeHtml(r.StudentID)}">Delete</button>
+                </div>
+              </td>
+            </tr>
+          `
+          )
+          .join("");
+      }
+
+      function getFormData() {
+        const fd = new FormData(form);
+        return Object.fromEntries(fd.entries());
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getFormData();
+        const mode = data._mode;
+        delete data._mode;
+        try {
+          if (mode === "update") {
+            await api(`/api/students/${encodeURIComponent(data.StudentID)}`, {
+              method: "PUT",
+              body: JSON.stringify(data)
+            });
+            setStatus("Student updated.", "ok");
+          } else {
+            await api("/api/students", { method: "POST", body: JSON.stringify(data) });
+            setStatus("Student added.", "ok");
+          }
+          resetForm(form);
+          await loadStudents();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      body.addEventListener("click", async (e) => {
+        const editId = e.target?.dataset?.edit;
+        const delId = e.target?.dataset?.del;
+        if (!editId && !delId) return;
+
+        const rows = await api("/api/students");
+        if (editId) {
+          const s = rows.find((x) => String(x.StudentID) === String(editId));
+          if (!s) return;
+          form.StudentID.value = s.StudentID;
+          form.StudentID.readOnly = true;
+          form.Name.value = s.Name;
+          form.Email.value = s.Email;
+          form.Phone.value = s.Phone ?? "";
+          form.Department.value = s.Department;
+          form.Semester.value = s.Semester;
+          form.querySelector('input[name="_mode"]').value = "update";
+          setStatus("Loaded student into form. Click Save to update.", "ok");
+        }
+
+        if (delId) {
+          if (!confirm(`Delete StudentID ${delId}?`)) return;
+          try {
+            await api(`/api/students/${encodeURIComponent(delId)}`, { method: "DELETE" });
+            setStatus("Student deleted.", "ok");
+            resetForm(form);
+            form.StudentID.readOnly = false;
+            await loadStudents();
+          } catch (err) {
+            setStatus(err.message, "err");
+          }
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetForm(form);
+        form.StudentID.readOnly = false;
+        setStatus("Form reset.", "ok");
+      });
+
+      btnRefresh.addEventListener("click", async () => {
+        try {
+          await loadStudents();
+          setStatus("Table refreshed.", "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadStudents().catch((e) => setStatus(e.message, "err"));
+    </script>
+  </body>
+</html>
+

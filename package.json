@@ -1,0 +1,15 @@
+{
+  "name": "smart-college-resource-sims",
+  "version": "1.0.0",
+  "description": "Smart College Resource and Student Information Management System (Node.js + MySQL + Vanilla HTML/CSS/JS)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mysql2": "^3.14.1"
+  }
+}
+

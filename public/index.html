@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Smart College Resource & Student Info Management</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="card" style="margin-bottom:14px">
+        <h3>Quick Health Check</h3>
+        <p class="muted">Verifies your Node server and MySQL connection.</p>
+        <button class="btn" id="btnHealth">Check /api/health</button>
+        <span id="healthOut" class="pill" style="margin-left:10px"></span>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>Student Management</h3>
+          <p>Add, view, update, delete student records.</p>
+          <a class="btn" href="/students.html">Open</a>
+        </div>
+        <div class="card">
+          <h3>Course Management</h3>
+          <p>Add courses, assign faculty, view courses.</p>
+          <a class="btn" href="/courses.html">Open</a>
+        </div>
+        <div class="card">
+          <h3>Enrollment Module</h3>
+          <p>Enroll students in courses, view enrollments.</p>
+          <a class="btn" href="/enrollments.html">Open</a>
+        </div>
+        <div class="card">
+          <h3>Attendance Module</h3>
+          <p>Add attendance percentage, view attendance.</p>
+          <a class="btn" href="/attendance.html">Open</a>
+        </div>
+        <div class="card">
+          <h3>Resource Module</h3>
+          <p>Add/view resources like labs, rooms, projectors.</p>
+          <a class="btn" href="/resources.html">Open</a>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <h3>Tip</h3>
+        <p class="muted">
+          Sample data is included in <span class="pill">schema.sql</span>. Import it once, then start the server.
+        </p>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const btn = document.getElementById("btnHealth");
+      const out = document.getElementById("healthOut");
+      btn.addEventListener("click", async () => {
+        out.textContent = "Checking...";
+        try {
+          const data = await api("/api/health");
+          out.textContent = data.ok ? "DB Connected" : "Not OK";
+          setStatus("Health check successful.", "ok");
+        } catch (e) {
+          out.textContent = "Failed";
+          setStatus(e.message, "err");
+        }
+      });
+    </script>
+  </body>
+</html>
+

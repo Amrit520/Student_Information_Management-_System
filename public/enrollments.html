@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enrollments - Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Enrollment Module</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="row">
+        <section class="card">
+          <h3>Enroll Student in Course</h3>
+          <p class="muted">Unique constraint: one student cannot enroll in the same course twice.</p>
+          <form id="enrollForm">
+            <input type="hidden" name="_mode" value="create" />
+
+            <label for="EnrollmentID">EnrollmentID</label>
+            <input id="EnrollmentID" name="EnrollmentID" type="number" required />
+
+            <label for="StudentID">StudentID</label>
+            <input id="StudentID" name="StudentID" type="number" required />
+
+            <label for="CourseID">CourseID</label>
+            <input id="CourseID" name="CourseID" type="number" required />
+
+            <label for="Semester">Semester (1-8)</label>
+            <input id="Semester" name="Semester" type="number" min="1" max="8" required />
+
+            <label for="Grade">Grade (optional)</label>
+            <input id="Grade" name="Grade" type="text" placeholder="e.g. A, B+, O" />
+
+            <div class="form-actions">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn secondary" type="button" id="btnReset">Reset</button>
+              <button class="btn secondary" type="button" id="btnRefresh">Refresh Table</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3>Enrollments List</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>EnrollmentID</th>
+                  <th>Student</th>
+                  <th>Course</th>
+                  <th>Semester</th>
+                  <th>Grade</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="enrollBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const form = qs("#enrollForm");
+      const body = qs("#enrollBody");
+      const btnReset = qs("#btnReset");
+      const btnRefresh = qs("#btnRefresh");
+
+      async function loadEnrollments() {
+        const rows = await api("/api/enrollments");
+        body.innerHTML = rows
+          .map(
+            (r) => `
+          <tr>
+            <td>${escapeHtml(r.EnrollmentID)}</td>
+            <td>${escapeHtml(r.StudentID)} <span class="pill">${escapeHtml(r.StudentName)}</span></td>
+            <td>${escapeHtml(r.CourseID)} <span class="pill">${escapeHtml(r.CourseName)}</span></td>
+            <td>${escapeHtml(r.Semester)}</td>
+            <td>${escapeHtml(r.Grade ?? "")}</td>
+            <td>
+              <div class="actions">
+                <button class="btn secondary" data-edit="${escapeHtml(r.EnrollmentID)}">Edit</button>
+                <button class="btn danger" data-del="${escapeHtml(r.EnrollmentID)}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      }
+
+      function getData() {
+        const fd = new FormData(form);
+        return Object.fromEntries(fd.entries());
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getData();
+        const mode = data._mode;
+        delete data._mode;
+        try {
+          if (mode === "update") {
+            await api(`/api/enrollments/${encodeURIComponent(data.EnrollmentID)}`, {
+              method: "PUT",
+              body: JSON.stringify({ Semester: data.Semester, Grade: data.Grade })
+            });
+            setStatus("Enrollment updated.", "ok");
+          } else {
+            await api("/api/enrollments", { method: "POST", body: JSON.stringify(data) });
+            setStatus("Student enrolled.", "ok");
+          }
+          resetForm(form);
+          form.EnrollmentID.readOnly = false;
+          await loadEnrollments();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      body.addEventListener("click", async (e) => {
+        const editId = e.target?.dataset?.edit;
+        const delId = e.target?.dataset?.del;
+        if (!editId && !delId) return;
+
+        const rows = await api("/api/enrollments");
+
+        if (editId) {
+          const en = rows.find((x) => String(x.EnrollmentID) === String(editId));
+          if (!en) return;
+          form.EnrollmentID.value = en.EnrollmentID;
+          form.EnrollmentID.readOnly = true;
+          form.StudentID.value = en.StudentID;
+          form.CourseID.value = en.CourseID;
+          form.Semester.value = en.Semester;
+          form.Grade.value = en.Grade ?? "";
+          form.querySelector('input[name="_mode"]').value = "update";
+          setStatus("Loaded enrollment. You can update Semester/Grade.", "ok");
+        }
+
+        if (delId) {
+          if (!confirm(`Delete EnrollmentID ${delId}?`)) return;
+          try {
+            await api(`/api/enrollments/${encodeURIComponent(delId)}`, { method: "DELETE" });
+            setStatus("Enrollment deleted.", "ok");
+            resetForm(form);
+            form.EnrollmentID.readOnly = false;
+            await loadEnrollments();
+          } catch (err) {
+            setStatus(err.message, "err");
+          }
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetForm(form);
+        form.EnrollmentID.readOnly = false;
+        setStatus("Form reset.", "ok");
+      });
+      btnRefresh.addEventListener("click", async () => {
+        try {
+          await loadEnrollments();
+          setStatus("Table refreshed.", "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadEnrollments().catch((e) => setStatus(e.message, "err"));
+    </script>
+  </body>
+</html>
+

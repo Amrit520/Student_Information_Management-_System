@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Courses - Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Course Management</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="row">
+        <section class="card">
+          <h3>Add / Update Course</h3>
+          <p class="muted">You can assign faculty by entering FacultyID (optional).</p>
+
+          <form id="courseForm">
+            <input type="hidden" name="_mode" value="create" />
+
+            <label for="CourseID">CourseID</label>
+            <input id="CourseID" name="CourseID" type="number" required />
+
+            <label for="CourseName">CourseName</label>
+            <input id="CourseName" name="CourseName" type="text" required />
+
+            <label for="Credits">Credits (1-6)</label>
+            <input id="Credits" name="Credits" type="number" min="1" max="6" required />
+
+            <label for="FacultyID">FacultyID (optional)</label>
+            <input id="FacultyID" name="FacultyID" type="number" placeholder="e.g. 2001" />
+
+            <div class="form-actions">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn secondary" type="button" id="btnReset">Reset</button>
+              <button class="btn secondary" type="button" id="btnRefresh">Refresh Table</button>
+            </div>
+          </form>
+
+          <hr class="divider" />
+
+          <h3>Assign Faculty (Quick)</h3>
+          <form id="assignForm">
+            <label for="AssignCourseID">CourseID</label>
+            <input id="AssignCourseID" name="CourseID" type="number" required />
+            <label for="AssignFacultyID">FacultyID</label>
+            <input id="AssignFacultyID" name="FacultyID" type="number" required />
+            <div class="form-actions">
+              <button class="btn" type="submit">Assign</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3>Courses List</h3>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>CourseID</th>
+                  <th>CourseName</th>
+                  <th>Credits</th>
+                  <th>Faculty</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="coursesBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const form = qs("#courseForm");
+      const assignForm = qs("#assignForm");
+      const body = qs("#coursesBody");
+      const btnReset = qs("#btnReset");
+      const btnRefresh = qs("#btnRefresh");
+
+      async function loadCourses() {
+        const rows = await api("/api/courses");
+        body.innerHTML = rows
+          .map(
+            (r) => `
+          <tr>
+            <td>${escapeHtml(r.CourseID)}</td>
+            <td>${escapeHtml(r.CourseName)}</td>
+            <td>${escapeHtml(r.Credits)}</td>
+            <td>${r.FacultyID ? `${escapeHtml(r.FacultyID)} <span class="pill">${escapeHtml(r.FacultyName ?? "")}</span>` : "<span class=\"pill\">Not Assigned</span>"}</td>
+            <td>
+              <div class="actions">
+                <button class="btn secondary" data-edit="${escapeHtml(r.CourseID)}">Edit</button>
+                <button class="btn danger" data-del="${escapeHtml(r.CourseID)}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      }
+
+      function getFormData(f) {
+        const fd = new FormData(f);
+        const obj = Object.fromEntries(fd.entries());
+        Object.keys(obj).forEach((k) => {
+          if (obj[k] === "") obj[k] = "";
+        });
+        return obj;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getFormData(form);
+        const mode = data._mode;
+        delete data._mode;
+        try {
+          if (mode === "update") {
+            await api(`/api/courses/${encodeURIComponent(data.CourseID)}`, {
+              method: "PUT",
+              body: JSON.stringify(data)
+            });
+            setStatus("Course updated.", "ok");
+          } else {
+            await api("/api/courses", { method: "POST", body: JSON.stringify(data) });
+            setStatus("Course added.", "ok");
+          }
+          resetForm(form);
+          form.CourseID.readOnly = false;
+          await loadCourses();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      body.addEventListener("click", async (e) => {
+        const editId = e.target?.dataset?.edit;
+        const delId = e.target?.dataset?.del;
+        if (!editId && !delId) return;
+
+        const rows = await api("/api/courses");
+
+        if (editId) {
+          const c = rows.find((x) => String(x.CourseID) === String(editId));
+          if (!c) return;
+          form.CourseID.value = c.CourseID;
+          form.CourseID.readOnly = true;
+          form.CourseName.value = c.CourseName;
+          form.Credits.value = c.Credits;
+          form.FacultyID.value = c.FacultyID ?? "";
+          form.querySelector('input[name="_mode"]').value = "update";
+          setStatus("Loaded course into form. Click Save to update.", "ok");
+        }
+
+        if (delId) {
+          if (!confirm(`Delete CourseID ${delId}?`)) return;
+          try {
+            await api(`/api/courses/${encodeURIComponent(delId)}`, { method: "DELETE" });
+            setStatus("Course deleted.", "ok");
+            resetForm(form);
+            form.CourseID.readOnly = false;
+            await loadCourses();
+          } catch (err) {
+            setStatus(err.message, "err");
+          }
+        }
+      });
+
+      assignForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getFormData(assignForm);
+        try {
+          await api(`/api/courses/${encodeURIComponent(data.CourseID)}/assign-faculty`, {
+            method: "PUT",
+            body: JSON.stringify({ FacultyID: data.FacultyID })
+          });
+          setStatus("Faculty assigned to course.", "ok");
+          assignForm.reset();
+          await loadCourses();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetForm(form);
+        form.CourseID.readOnly = false;
+        setStatus("Form reset.", "ok");
+      });
+      btnRefresh.addEventListener("click", async () => {
+        try {
+          await loadCourses();
+          setStatus("Table refreshed.", "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadCourses().catch((e) => setStatus(e.message, "err"));
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resources - Smart College SIMS</title>
+    <link rel="stylesheet" href="/css/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Resource Module</div>
+      <nav class="nav">
+        <a href="/index.html">Dashboard</a>
+        <a href="/students.html">Students</a>
+        <a href="/courses.html">Courses</a>
+        <a href="/enrollments.html">Enrollments</a>
+        <a href="/attendance.html">Attendance</a>
+        <a href="/resources.html">Resources</a>
+      </nav>
+    </header>
+
+    <main class="container">
+      <div id="status" class="status"></div>
+
+      <div class="row">
+        <section class="card">
+          <h3>Add / Update Resource</h3>
+          <form id="resForm">
+            <input type="hidden" name="_mode" value="create" />
+
+            <label>ResourceID</label>
+            <input name="ResourceID" type="number" required />
+
+            <label>ResourceType</label>
+            <input name="ResourceType" type="text" placeholder="LAB / CLASSROOM / PROJECTOR" required />
+
+            <label>Location</label>
+            <input name="Location" type="text" required />
+
+            <label>Availability</label>
+            <select name="Availability" required>
+              <option value="AVAILABLE">AVAILABLE</option>
+              <option value="NOT_AVAILABLE">NOT_AVAILABLE</option>
+            </select>
+
+            <label>Capacity</label>
+            <input name="Capacity" type="number" min="0" required />
+
+            <div class="form-actions">
+              <button class="btn" type="submit">Save</button>
+              <button class="btn secondary" type="button" id="btnReset">Reset</button>
+              <button class="btn secondary" type="button" id="btnRefresh">Refresh Table</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card">
+          <h3>Resources List</h3>
+          <div style="overflow:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>ResourceID</th>
+                  <th>Type</th>
+                  <th>Location</th>
+                  <th>Availability</th>
+                  <th>Capacity</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="resBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="/js/common.js"></script>
+    <script>
+      const form = qs("#resForm");
+      const body = qs("#resBody");
+      const btnReset = qs("#btnReset");
+      const btnRefresh = qs("#btnRefresh");
+
+      async function loadResources() {
+        const rows = await api("/api/resources");
+        body.innerHTML = rows
+          .map(
+            (r) => `
+          <tr>
+            <td>${escapeHtml(r.ResourceID)}</td>
+            <td>${escapeHtml(r.ResourceType)}</td>
+            <td>${escapeHtml(r.Location)}</td>
+            <td>${r.Availability === "AVAILABLE" ? '<span class="pill" style="color:var(--ok)">AVAILABLE</span>' : '<span class="pill" style="color:var(--danger)">NOT_AVAILABLE</span>'}</td>
+            <td>${escapeHtml(r.Capacity)}</td>
+            <td>
+              <div class="actions">
+                <button class="btn secondary" data-edit="${escapeHtml(r.ResourceID)}">Edit</button>
+                <button class="btn danger" data-del="${escapeHtml(r.ResourceID)}">Delete</button>
+              </div>
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      }
+
+      function getData() {
+        const fd = new FormData(form);
+        return Object.fromEntries(fd.entries());
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const data = getData();
+        const mode = data._mode;
+        delete data._mode;
+        try {
+          if (mode === "update") {
+            await api(`/api/resources/${encodeURIComponent(data.ResourceID)}`, {
+              method: "PUT",
+              body: JSON.stringify(data)
+            });
+            setStatus("Resource updated.", "ok");
+          } else {
+            await api("/api/resources", { method: "POST", body: JSON.stringify(data) });
+            setStatus("Resource added.", "ok");
+          }
+          resetForm(form);
+          form.ResourceID.readOnly = false;
+          await loadResources();
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      body.addEventListener("click", async (e) => {
+        const editId = e.target?.dataset?.edit;
+        const delId = e.target?.dataset?.del;
+        if (!editId && !delId) return;
+
+        const rows = await api("/api/resources");
+
+        if (editId) {
+          const r = rows.find((x) => String(x.ResourceID) === String(editId));
+          if (!r) return;
+          form.ResourceID.value = r.ResourceID;
+          form.ResourceID.readOnly = true;
+          form.ResourceType.value = r.ResourceType;
+          form.Location.value = r.Location;
+          form.Availability.value = r.Availability;
+          form.Capacity.value = r.Capacity;
+          form.querySelector('input[name="_mode"]').value = "update";
+          setStatus("Loaded resource into form. Click Save to update.", "ok");
+        }
+
+        if (delId) {
+          if (!confirm(`Delete ResourceID ${delId}?`)) return;
+          try {
+            await api(`/api/resources/${encodeURIComponent(delId)}`, { method: "DELETE" });
+            setStatus("Resource deleted.", "ok");
+            resetForm(form);
+            form.ResourceID.readOnly = false;
+            await loadResources();
+          } catch (err) {
+            setStatus(err.message, "err");
+          }
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetForm(form);
+        form.ResourceID.readOnly = false;
+        setStatus("Form reset.", "ok");
+      });
+      btnRefresh.addEventListener("click", async () => {
+        try {
+          await loadResources();
+          setStatus("Table refreshed.", "ok");
+        } catch (err) {
+          setStatus(err.message, "err");
+        }
+      });
+
+      loadResources().catch((e) => setStatus(e.message, "err"));
+    </script>
+  </body>
+</html>
+
